@@ -1,83 +1,127 @@
-import React, { useState } from "react";
-import { Button, Input, Spin } from "antd";
+import React, {useEffect, useRef, useState} from "react";
+import { Button, Input } from "antd";
 import { ArrowUpOutlined } from "@ant-design/icons";
-import axios from "axios";
 import { Message } from "./Message";
 import { motion } from "framer-motion";
-import "./styles/chat.css"
+import "./styles/chat.css";
 
 export const Chat = () => {
-    const [messages, setMessages] = useState<string[]>([]);
-    const [userInput, setUserInput] = useState<string>("");
-    const [loading, setLoading] = useState<boolean>(false);
+  const messageContainerRef = useRef(null);
+  const [messages, setMessages] = useState([]);
+  const [userInput, setUserInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [isUserScrolling, setIsUserScrolling] = useState(false)
 
-    const handleSubmit = async () => {
-        if (!userInput.trim()) return;
-        setLoading(true);
+  useEffect(() => {
+        const container = messageContainerRef.current;
 
-        try {
-            const response = await axios.get(`http://localhost:2024/generate?user_input=${userInput}`);
-            if (response.status === 200) {
-                console.log(response)
-                const messages = response.data.trim().split("\n").map(JSON.parse).map(e => `${e.message}`);
-                setMessages(prev => [...prev, ...messages]);
-            }
-        } catch (e) {
-            console.log(e);
-        } finally {
-            setLoading(false);
-            setUserInput("");
+        if (!container) return;
+
+        const handleScroll = () => {
+            const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 20;
+            setIsUserScrolling(!isAtBottom);
+        };
+
+        container.addEventListener("scroll", handleScroll);
+
+        return () => {
+            container.removeEventListener("scroll", handleScroll);
+        };
+    }, []);
+
+      useEffect(() => {
+        if (!isUserScrolling || loading) {
+            messageContainerRef.current?.scrollTo({
+                top: messageContainerRef.current.scrollHeight,
+                behavior: "smooth",
+            });
         }
-    };
+    }, [messages, loading]);
 
-    return (
-        <div className="chat-container">
-            <div className="message-container">
-                {messages.length === 0 && (
-                    <h2
-                        style={{ display: "flex", justifySelf: 'center', alignSelf: 'center' }}>
-                        Ask everything you want!
-                    </h2>
-                )}
-                {messages.map((message, index) => (
-                    <motion.div
-                        key={index}
-                        initial={{ opacity: 0, x: message.startsWith("user:") ? 50 : -50 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.3 }}
-                    >
-                        <Message message={message} isUserMessage={messages.indexOf(message) % 2 === 0} />
-                    </motion.div>
-                ))}
-                {loading && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.3 }}
-                        className="loading-indicator"
-                    >
-                        <Spin /> <span>Bot is typing...</span>
-                    </motion.div>
-                )}
-            </div>
+  const handleSubmit = () => {
+  if (!userInput.trim()) return;
 
-            <div className="input-container">
-                <Input
-                    value={userInput}
-                    onChange={e => setUserInput(e.target.value)}
-                    placeholder="Write your prompt here..."
-                    className="chat-input"
-                    onPressEnter={handleSubmit}
-                    disabled={loading}
-                />
-                <Button
-                    icon={<ArrowUpOutlined />}
-                    size="large"
-                    className="send-button"
-                    onClick={handleSubmit}
-                    loading={loading}
-                />
-            </div>
-        </div>
-    );
+  setMessages((prev) => [...prev, { text: userInput, isUserMessage: true }]);
+  setLoading(true);
+
+  let currentAssistantMessage = "";
+
+  const eventSource = new EventSource(
+    `http://localhost:2024/generate?user_input=${encodeURIComponent(userInput)}`
+  );
+
+  eventSource.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    currentAssistantMessage += data.message;
+
+    setMessages((prevMessages: {text: string, isUserMessage: boolean}[]) => {
+      if (prevMessages.length === 0) return prevMessages;
+
+      const lastMessage = prevMessages[prevMessages.length - 1];
+
+      if (lastMessage.isUserMessage) {
+        return [...prevMessages, { text: currentAssistantMessage, isUserMessage: false }];
+      } else {
+        return [
+          ...prevMessages.slice(0, -1),
+          { ...lastMessage, text: currentAssistantMessage },
+        ];
+      }
+    });
+  };
+
+  eventSource.onerror = (error) => {
+    console.error("SSE error:", error);
+    eventSource.close();
+    setLoading(false);
+  };
+
+  eventSource.addEventListener("end", () => {
+    setLoading(false);
+    eventSource.close();
+  });
+
+  setUserInput("");
+};
+
+  return (
+    <div className="chat-container">
+      <div ref={messageContainerRef} className="message-container">
+        {messages.length === 0 && (
+          <h2 style={{ display: "flex", justifySelf: "center", alignSelf: "center" }}>
+            Ask everything you want!
+          </h2>
+        )}
+
+        {messages.map((msg, index) => (
+          <motion.div
+            key={index}
+            initial={{ opacity: 0, x: msg.isUserMessage ? 50 : -50 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Message message={msg.text} isUserMessage={msg.isUserMessage} />
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="input-container">
+        <Input
+          value={userInput}
+          onChange={(e) => setUserInput(e.target.value)}
+          placeholder="Write your prompt here..."
+          className="chat-input"
+          onPressEnter={handleSubmit}
+          disabled={loading}
+        />
+        <Button
+          icon={<ArrowUpOutlined />}
+          size="large"
+          className="send-button"
+          onClick={handleSubmit}
+          loading={loading}
+        />
+      </div>
+    </div>
+  );
 };

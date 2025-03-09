@@ -4,6 +4,7 @@
     "paths": {
       "@components/*": ["components/*"]
     },
-    "jsx": "react"
+    "jsx": "react",
+    "allowSyntheticDefaultImports": true
   }
 }

@@ -10,21 +10,22 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
 async def stream_graph_updates(user_input: str):
     events = graph.stream(
         {"messages": [{"role": "user", "content": user_input}]},
         config,
-        stream_mode="values",
+        stream_mode="messages",
     )
     for event in events:
-        print(event["messages"])
-        yield json.dumps({"message": event["messages"][-1].content}) + '\n'
+        content, _ = event
+        yield f"data: {json.dumps({'message': content.content})}\n\n"
 
 
 @app.get("/generate")
