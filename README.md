@@ -1,5 +1,5 @@
 # 🌟 ConvoCraft  
-A seamless chatbot solution built with Python and Langchain, connected to a React frontend via FastAPI for crafting dynamic and intelligent conversations.  
+A seamless chatbot solution built with Python and Langchain, connected to a React.js frontend via FastAPI for crafting dynamic and intelligent conversations.  
 
 ## 🚀 Features  
 - **Conversational Intelligence:** Powered by Langchain for advanced natural language understanding.  
